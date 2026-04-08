@@ -1,28 +1,67 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../utils/axios';
-import { FaCalendarAlt, FaMapMarkerAlt, FaSearch, FaRegClock, FaTicketAlt, FaShieldAlt } from 'react-icons/fa';
+import { AuthContext } from '../context/AuthContext';
+import { FaCalendarAlt, FaMapMarkerAlt, FaSearch, FaRegClock, FaTicketAlt, FaShieldAlt, FaHeart, FaRegHeart } from 'react-icons/fa';
 
 const Home = () => {
+    const { user } = React.useContext(AuthContext);
+    const navigate = useNavigate();
     const [events, setEvents] = useState([]);
     const [search, setSearch] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('');
+    const [wishlist, setWishlist] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    const categories = ['All', 'Tech', 'Music', 'Workshop', 'Conference', 'Social', 'Gaming'];
+
+    useEffect(() => {
+        if (user) {
+            fetchWishlist();
+        }
+    }, [user]);
 
     useEffect(() => {
         const timeoutId = setTimeout(() => {
             fetchEvents();
         }, 400); // 400ms debounce
         return () => clearTimeout(timeoutId);
-    }, [search]);
+    }, [search, selectedCategory]);
 
     const fetchEvents = async () => {
         try {
-            const { data } = await api.get(`/events?search=${search}`);
+            const { data } = await api.get(`/events?search=${search}&category=${selectedCategory === 'All' ? '' : selectedCategory}`);
             setEvents(data);
         } catch (error) {
             console.error('Error fetching events:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchWishlist = async () => {
+        try {
+            const { data } = await api.get('/user/wishlist');
+            setWishlist(data.map(item => item._id));
+        } catch (error) {
+            console.error('Error fetching wishlist:', error);
+        }
+    };
+
+    const toggleWishlist = async (eventId, e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!user) {
+            // Use window.location as navigate is not imported in the original but I added it
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const { data } = await api.put('/user/wishlist', { eventId });
+            setWishlist(data);
+        } catch (error) {
+            console.error('Error toggling wishlist:', error);
         }
     };
 
@@ -50,6 +89,23 @@ const Home = () => {
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
+                    </div>
+
+                    {/* Category Filter Pills */}
+                    <div className="mt-10 flex flex-wrap justify-center gap-3">
+                        {categories.map((cat) => (
+                            <button
+                                key={cat}
+                                onClick={() => setSelectedCategory(cat === 'All' ? '' : cat)}
+                                className={`px-5 py-2 rounded-full text-sm font-bold transition-all border ${
+                                    (selectedCategory === cat) || (cat === 'All' && !selectedCategory)
+                                        ? 'bg-white text-black border-white shadow-lg scale-105'
+                                        : 'bg-white/10 text-white border-white/20 hover:bg-white/20'
+                                }`}
+                            >
+                                {cat}
+                            </button>
+                        ))}
                     </div>
                 </div>
             </div>
@@ -103,6 +159,16 @@ const Home = () => {
                                 <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-bold shadow-sm">
                                     {event.ticketPrice === 0 ? <span className="text-green-600">FREE</span> : <span className="text-gray-900">₹{event.ticketPrice}</span>}
                                 </div>
+                                <button
+                                    onClick={(e) => toggleWishlist(event._id, e)}
+                                    className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm p-2 rounded-full shadow-sm hover:scale-110 transition-transform group/heart"
+                                >
+                                    {wishlist.includes(event._id) ? (
+                                        <FaHeart className="text-red-500 text-lg" />
+                                    ) : (
+                                        <FaRegHeart className="text-gray-400 text-lg group-hover/heart:text-red-400" />
+                                    )}
+                                </button>
                             </div>
                             <div className="p-6 flex-grow flex flex-col">
                                 <div className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">{event.category}</div>

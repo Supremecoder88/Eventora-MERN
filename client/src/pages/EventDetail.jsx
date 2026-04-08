@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axios';
 import { AuthContext } from '../context/AuthContext';
-import { FaCalendarAlt, FaMapMarkerAlt, FaChair, FaMoneyBillWave } from 'react-icons/fa';
+import { FaCalendarAlt, FaMapMarkerAlt, FaChair, FaMoneyBillWave, FaStar, FaRegStar, FaUserCircle } from 'react-icons/fa';
 
 const EventDetail = () => {
     const { id } = useParams();
@@ -15,19 +15,27 @@ const EventDetail = () => {
     const [showOTP, setShowOTP] = useState(false);
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
+    const [reviews, setReviews] = useState([]);
+    const [rating, setRating] = useState(5);
+    const [comment, setComment] = useState('');
+    const [isReviewing, setIsReviewing] = useState(false);
 
     useEffect(() => {
-        const fetchEvent = async () => {
+        const fetchEventAndReviews = async () => {
             try {
-                const { data } = await api.get(`/events/${id}`);
-                setEvent(data);
+                const [eventRes, reviewsRes] = await Promise.all([
+                    api.get(`/events/${id}`),
+                    api.get(`/reviews/${id}`)
+                ]);
+                setEvent(eventRes.data);
+                setReviews(reviewsRes.data);
             } catch (err) {
                 setError('Failed to load event details.');
             } finally {
                 setLoading(false);
             }
         };
-        fetchEvent();
+        fetchEventAndReviews();
     }, [id]);
 
     const handleBooking = async () => {
@@ -55,6 +63,23 @@ const EventDetail = () => {
             setError(err.response?.data?.message || 'Booking failed');
         } finally {
             setBookingLoading(false);
+        }
+    };
+
+    const handleReviewSubmit = async (e) => {
+        e.preventDefault();
+        setIsReviewing(true);
+        setError('');
+        try {
+            const { data } = await api.post('/reviews', { eventId: id, rating, comment });
+            setReviews([{ ...data, user: { name: user.name } }, ...reviews]);
+            setSuccessMsg('Review posted successfully!');
+            setComment('');
+            setRating(5);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to post review');
+        } finally {
+            setIsReviewing(false);
         }
     };
 
@@ -157,6 +182,76 @@ const EventDetail = () => {
                         </button>
                         {error && <p className="text-red-500 mt-4 text-center font-medium bg-red-50 p-2 rounded">{error}</p>}
                         {successMsg && <p className="text-green-600 mt-4 text-center font-medium bg-green-50 p-2 rounded">{successMsg}</p>}
+                    </div>
+                </div>
+
+                {/* Reviews Section */}
+                <div className="mt-16 pt-16 border-t border-gray-100">
+                    <h2 className="text-3xl font-black text-gray-900 mb-10 flex items-center gap-4">
+                        Reviews <span className="text-gray-300 text-xl font-medium">({reviews.length})</span>
+                    </h2>
+
+                    {user && (
+                        <form onSubmit={handleReviewSubmit} className="bg-gray-50 p-8 rounded-2xl mb-12 border border-gray-100 shadow-sm transition-all focus-within:shadow-md">
+                            <h4 className="text-lg font-bold text-gray-800 mb-6">Rate your experience</h4>
+                            
+                            <div className="flex gap-2 mb-6">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                        key={star}
+                                        type="button"
+                                        onClick={() => setRating(star)}
+                                        className="text-3xl transition-transform hover:scale-125 focus:outline-none"
+                                    >
+                                        {star <= rating ? <FaStar className="text-yellow-400" /> : <FaRegStar className="text-gray-300" />}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <textarea
+                                className="w-full p-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-gray-900 focus:outline-none transition-all mb-4 text-gray-700 min-h-[120px]"
+                                placeholder="Write your thoughts about this event..."
+                                value={comment}
+                                onChange={(e) => setComment(e.target.value)}
+                                required
+                            />
+
+                            <button
+                                type="submit"
+                                disabled={isReviewing}
+                                className="bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition shadow-md hover:shadow-lg disabled:bg-gray-300 disabled:cursor-not-allowed"
+                            >
+                                {isReviewing ? 'Posting...' : 'Post Review'}
+                            </button>
+                        </form>
+                    )}
+
+                    <div className="space-y-8">
+                        {reviews.length === 0 ? (
+                            <p className="text-gray-400 italic text-center py-10 bg-gray-50 rounded-2xl">No reviews yet. Be the first to share your experience!</p>
+                        ) : (
+                            reviews.map((rev) => (
+                                <div key={rev._id} className="flex gap-6 items-start group">
+                                    <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 shrink-0 text-2xl group-hover:bg-gray-900 group-hover:text-white transition-colors duration-500">
+                                        <FaUserCircle />
+                                    </div>
+                                    <div className="flex-grow">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h5 className="font-bold text-gray-900">{rev.user?.name || 'User'}</h5>
+                                            <span className="text-xs text-gray-400 font-medium">
+                                                {new Date(rev.createdAt).toLocaleDateString()}
+                                            </span>
+                                        </div>
+                                        <div className="flex gap-1 mb-3">
+                                            {[...Array(5)].map((_, i) => (
+                                                <FaStar key={i} className={`text-sm ${i < rev.rating ? 'text-yellow-400' : 'text-gray-200'}`} />
+                                            ))}
+                                        </div>
+                                        <p className="text-gray-600 leading-relaxed text-sm">{rev.comment}</p>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </div>
                 </div>
             </div>
